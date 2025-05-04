@@ -1,0 +1,101 @@
+-- salary queries
+
+-- highest budget
+select teamID, yearID, salary, wins, winPCT, WsWin
+from salaries natural join team_record
+where (yearID, salary)
+in (select yearID, max(salary)
+from salaries
+group by yearID);
+
+-- highest budget albb highest win
+select teamID, yearID, salary, wins, winPCT, WsWin
+from salaries natural join team_record
+where (yearID, wins)
+in (select yearID, max(wins)
+from team_record
+group by yearID)
+and (yearID, salary)
+in (select yearID, max(salary)
+from salaries
+group by yearID);
+
+-- lowest budget
+select teamID, yearID, salary, wins, winPCT, DivWin, LgWin, WsWin
+from salaries natural join team_record
+where (yearID, salary)
+in (select yearID, min(salary)
+from salaries
+group by yearID);
+
+-- lowest 5 budgets
+SELECT teamID, yearID, salary, wins, winPCT, WsWin
+FROM (
+SELECT s.teamID, s.yearID, s.salary, t.wins, t.winPCT, t.WsWin,
+RANK() OVER (PARTITION BY s.yearID ORDER BY s.salary asc) AS salary_rank
+FROM salaries s
+NATURAL JOIN team_record t
+) ranked_salaries
+WHERE salary_rank <= 5
+ORDER BY yearID, salary asc;
+
+-- era rank for ws winner
+with era_stats as 
+(select yearID, teamID, era, rank() over (Partition by yearID order by era asc) as era_rank,
+AVG(era) over (Partition by yearID) as league_avg_era
+from team_record natural join team_pitching)
+select yearID, teamID, era, era_rank, round(league_avg_era,2), round(league_avg_era-era, 2) as era_better_than_avg
+from era_stats natural join team_record
+where WsWin = 'Y'
+
+order by yearID;
+-- how runs rank change
+with run_stats as 
+(select yearID, teamID, runs, rank() over (Partition by yearID order by runs desc) as run_rank,
+AVG(runs) over (Partition by yearID) as league_avg_runs
+from team_record natural join team_offense)
+select yearID, teamID, runs, run_rank, round(league_avg_runs,2), round(runs-league_avg_runs, 2) as runs_better_than_avg
+from run_stats natural join team_record
+where WsWin = 'Y'
+order by yearID;
+
+-- how hr rank changed
+with hr_stats as 
+(select yearID, teamID, hr, rank() over (Partition by yearID order by hr desc) as hr_rank,
+AVG(hr) over (Partition by yearID) as league_avg_hr
+from team_record natural join team_offense)
+select yearID, teamID, hr, hr_rank, round(league_avg_hr,2), round(hr-league_avg_hr, 2) as hr_better_than_avg
+from hr_stats natural join team_record
+where WsWin = 'Y'
+order by yearID;
+
+-- salary rank of WS winner
+with budget_stats as 
+(select yearID, teamID, salary, rank() over (Partition by yearID order by salary desc) as salary_rank,
+AVG(salary) over (Partition by yearID) as league_avg_salary
+from team_record natural join salaries)
+select yearID, teamID, salary, salary_rank, round(league_avg_salary,2), round(salary-league_avg_salary, 2) as salary_better_than_avg
+from budget_stats natural join team_record
+where WsWin = 'Y'
+order by yearID;
+
+-- runs scored vs era
+with win_stats as
+(select yearID, teamID, salary, rank() over (Partition by yearID order by salary desc) as salary_rank, runs, rank() over (Partition by yearID order by runs desc) as run_rank,
+hr, rank() over (Partition by yearID order by hr desc) as hr_rank, era, rank() over (Partition by yearID order by era asc) as era_rank,
+AVG(era) over (Partition by yearID) as league_avg_era, AVG(wins) over (Partition by yearID), rank() over (Partition by yearID order by wins desc) as win_rank
+from team_record natural join salaries natural join team_offense natural join team_pitching)
+select yearID, teamID, salary, salary_rank, runs, run_rank, hr, hr_rank, era, era_rank, wins, win_rank
+from team_record natural join win_stats
+where win_rank <= 5
+order by yearID;
+
+
+-- how so have changed
+with so_stats as
+(select yearID, teamID, so, rank() over (Partition by yearID order by so desc) as so_rank, hr, rank() over (Partition by yearID order by hr desc) as hr_rank
+from team_record natural join team_offense)
+select yearID, teamID,  hr, hr_rank, so, so_rank
+from team_record natural join so_stats
+where so_rank <= 10
+order by yearID;
